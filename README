@@ -1,0 +1,27 @@
+tersmu-0.2
+==========
+
+tersmu is a semantic parser for the engineered human language Lojban
+(www.lojban.org). It translates lojban text to a predicate logic.
+
+Please note that this is an entirely unofficial project. Although the aim to
+follow baseline prescription where feasible, the semantics this program
+attributes to lojban text may in some cases be non-standard and/or wrong.
+
+See the examples/ directory for some examples, BUGS for limitations, docs/ for
+other documentation.
+
+
+Installation
+------------
+tersmu is in hackage, so it should just be a matter of
+    cabal install tersmu
+
+
+Hacking
+-------
+Lojban.hs and Morphology.hs are generated from the corresponding .pappy files,
+using a bugfixed version of Bryan Ford's Pappy. Please see the Makefile for
+details on that.
+
+docs/overview is intended as a guide to the general architecture of the code.

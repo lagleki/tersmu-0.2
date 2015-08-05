@@ -1,0 +1,27 @@
+Next main job:
+    redo parsing so as to properly handle full grammar and morphology,
+    and ensure frees are correctly associated with their positions.
+
+    I'm currently unsure whether this should be done by using a camxes
+    implementation as an external program, or by implementing camxes
+    ourselves.
+
+    Once this is done, we can think about handling UI and so on.
+
+Support {sei sa'a} and {to'i}?
+
+use to...toi in lojban for sides?
+
+alternative tags mode, doing away with modals and non-logical sentence
+connectives in favour of extra WithEventAs and TagRels?
+    Nice idea, but I don't see how to handle complicated joik connected
+    tenses; see notes/reductions.
+
+option to render sumti (and tag, abstractor) connectives as quantifiers?
+
+Pretty printing
+
+illocution: ko etc
+
+irrealis UI - allow a free as a selbri tcita, then current free handling
+should get the scope right, and we can consider them as modal operators?

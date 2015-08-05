@@ -1,0 +1,49 @@
+Bugs, limitations, and questionable design choices
+==================================================
+
+All known divergence from baseline (CLL+xorlo), or from plausible
+interpretations thereof, is noted here.
+
+Bugs:
+    Question words other than {xu},{ma} and {mo} are not handled properly.
+
+    The parser is only an approximation of camxes, resulting in some bugs:
+	free clauses (vocatives, {to} brackets, {sei} etc) sometimes lead to
+	    parse errors if they're not at the start of a (sub)sentence;
+	{zoi} quotes don't work properly;
+	magic words aren't handled accurately, and erasure cmavo not at all.
+
+Limitations:
+    Most indicators and frees are ignored, even those such as "irrealis"
+    attitudinals which arguably have logical meaning.
+
+    {ko} is not handled specially.
+
+    {ra'o} is ignored.
+
+    We parse the name in "LA sumtiTail", whereas arguably we should just use
+    the text. Similarly, we don't keep hold of the raw text of a lu-quote.
+
+    We don't handle {nei} or {no'a}, which have murky and self-referential
+    semantics.
+
+    We don't handle {soi}.
+
+Deliberate deviations from baseline, not considered bugs:
+    {na broda} is equivalent to {naku broda}; consequently, {ja'a} has no
+    logical effect. This is in line with the BPFK section "brivla negators".
+
+    Quantifiers don't scope over (even connected) sentence boundaries, unless
+    prenexed.
+
+    We consider {PA da} to introduce a quantifier in the usual logical sense,
+    so ignore CLL's rules on rebinding bound variables (CLL:16.14) and
+    simultaneous quantification in termsets (CLL:16.7) which conflict with
+    this.
+
+    Some constructs are accepted which the official grammar rejects; e.g. the
+    tag grammar we use is essentially that of xorxes' zasni gerna.
+
+Other behaviour whose correctness may not be immediately obvious:
+    The {vo'a} series can only refer backwards. To see why, consider
+	{vo'e broda ko'a gi'e brode ko'e}.

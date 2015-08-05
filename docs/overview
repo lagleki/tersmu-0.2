@@ -1,0 +1,28 @@
+Overview of tersmu architecture
+===============================
+
+Input: Lojban text, an instance of the 'text' production.
+
+Step 1: Input is parsed into an abstract syntactic form.
+    The core of this is the pappy-generated module Tersmu
+    but some preprocessing is first done by
+	(pappy-generated) Morphology and Morph,
+	    which split the input into lojban words,
+	and by ParseText.hs,
+	    which implements some imperfect ad hoc handling of indicators and
+	    frees.
+    The result of this stage is an instance of JboSyntax.Text
+
+Step 2: The abstract syntax is converted to logical form.
+    This is the job of JboParse. The algorithm is necessarily baroque.
+    A little monadic voodoo is required, using a stack of state and
+	continuation monad transformers. The definitions and associated code are
+	in ParseM; JboParse aims to be relatively clean and readable without
+	extensive knowledge of Haskell.
+    The result is a list of (fragments and) propositions in the generalised
+	predicate logic defined abstractly in Logic and specialised to lojban
+	in JboProp.
+
+Output: For now, all we know how to do with a JboProp is print it.
+    JboShow has the print routines.
+    The output syntax should be considered provisional, subject to change.

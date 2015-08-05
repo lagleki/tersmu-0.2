@@ -1,0 +1,520 @@
+-- vim:ft=haskell
+--
+-- adapted from xorxes' BPFK morphology algorithm
+-- http://www.lojban.org/tiki/BPFK+Section%3A+PEG+Morphology+Algorithm
+-- by Martin Bays 2014
+
+-- --- GRAMMAR ---
+-- This grammar classifies words by their morphological class (cmene,
+-- gismu, lujvo, fuhivla, cmavo, and non_lojban_word). 
+-- 
+--The final section sorts cmavo into grammatical classes (A, BAI, BAhE, ..., ZOhU).
+-- 
+-- mi'e ((xorxes))
+
+parser morphology:
+
+{
+import Data.Maybe
+}
+
+top words
+---------------------------------------------------------------------
+
+words :: {[String]} = pause? ws:(w:word pause? -> w)* -> ws
+
+word :: String = lojban_word / non_lojban_word
+
+lojban_word :: String = cmene / cmavo / brivla
+
+brivla :: String = gismu / fuhivla / lujvo
+
+---------------------------------------------------------------------
+
+cmene :: String = jbocme / zifcme
+
+zifcme :: String = !h ss:(nucleus / glide / h / s:consonant !pause -> s / digit)* s:consonant &pause -> {concat ss ++ s}
+
+jbocme :: String = &zifcme ss:(any_syllable / digit)+ &pause -> {concat ss}
+
+--cmene :: String = !h &consonant_final coda? (any_syllable / digit)* &pause
+
+--consonant_final :: String = (non_space &non_space)* consonant &pause
+
+--cmene :: String = !h cmene_syllable* &consonant coda? consonantal_syllable* onset &pause
+
+--cmene_syllable :: String = !doi_la_lai_lahi coda? consonantal_syllable* onset nucleus / digit
+
+--doi_la_lai_lahi :: String = (d o i / l a (h? i)?) !h !nucleus
+
+---------------------------------------------------------------------
+
+cmavo :: String = !cmene !CVCy_lujvo s:cmavo_form &post_word -> s
+
+CVCy_lujvo :: String
+    = s1:CVC_rafsi s2:y ms:h? ss:initial_rafsi* s3:brivla_core -> {s1++s2++fromMaybe "" ms++concat ss++s3}
+    / s1:stressed_CVC_rafsi s2:y s3:short_final_rafsi -> {s1++s2++s3}
+
+cmavo_form :: String
+    = !h !cluster s1:onset ss:cmavo_form_sub* s2:(!stressed s:nucleus -> s / s:nucleus !cluster -> s) -> {s1++concat ss++s2}
+    / ss:y+ -> {concat ss}
+    / digit
+cmavo_form_sub :: String = (s1:nucleus s2:h -> {s1++s2})
+
+---------------------------------------------------------------------
+
+lujvo :: String = !gismu !fuhivla !cmavo ss:initial_rafsi* s:brivla_core -> {concat ss++s}
+
+brivla_core :: String = fuhivla / gismu / CVV_final_rafsi / s1:stressed_initial_rafsi s2:short_final_rafsi -> {s1++s2}
+
+stressed_initial_rafsi :: String = stressed_extended_rafsi / stressed_y_rafsi / stressed_y_less_rafsi
+
+initial_rafsi :: String = extended_rafsi / y_rafsi / !any_extended_rafsi s:y_less_rafsi -> s
+
+any_extended_rafsi :: String = fuhivla / extended_rafsi / stressed_extended_rafsi
+
+---------------------------------------------------------------------
+
+fuhivla :: String = s1:fuhivla_head s2:stressed_syllable ss:consonantal_syllable* s3:final_syllable -> {s1++s2++concat ss++s3}
+
+stressed_extended_rafsi :: String = stressed_brivla_rafsi / stressed_fuhivla_rafsi 
+
+extended_rafsi :: String = brivla_rafsi / fuhivla_rafsi
+
+stressed_brivla_rafsi :: String = &unstressed_syllable s1:brivla_head s2:stressed_syllable s3:h s4:y -> {s1++s2++s3++s4}
+
+brivla_rafsi :: String = &(s1:syllable ss:consonantal_syllable* s2:syllable -> {s1++concat ss++s2}) s1:brivla_head s2:h s3:y ms:h? -> {s1++s2++s3++fromMaybe "" ms}
+
+stressed_fuhivla_rafsi :: String = s1:fuhivla_head s2:stressed_syllable &consonant s3:onset s4:y -> {s1++s2++s3++s4}
+
+fuhivla_rafsi :: String = &unstressed_syllable s1:fuhivla_head &consonant s2:onset s3:y ms:h? -> {s1++s2++s3++fromMaybe "" ms}
+
+fuhivla_head :: String = !rafsi_string s:brivla_head -> s
+
+brivla_head :: String = !cmavo !slinkuhi !h &onset ss:unstressed_syllable* -> {concat ss}
+
+slinkuhi :: String = s1:consonant s2:rafsi_string -> {s1++s2}
+
+rafsi_string :: String = ss:y_less_rafsi* s1:(gismu / CVV_final_rafsi / s1:stressed_y_less_rafsi s2:short_final_rafsi -> {s1++s2} / y_rafsi / stressed_y_rafsi / ms:stressed_y_less_rafsi? s1:initial_pair s2:y -> {fromMaybe "" ms++s1++s2}) -> {concat ss++s1}
+
+---------------------------------------------------------------------
+
+gismu :: String = s1:(s1:initial_pair s2:stressed_vowel -> {s1++s2} / s1:consonant s2:stressed_vowel s3:consonant -> {s1++s2++s3}) &final_syllable s2:consonant s3:vowel &post_word -> {s1++s2++s3}
+
+CVV_final_rafsi :: String = s1:consonant s2:stressed_vowel s3:h &final_syllable s4:vowel &post_word -> {s1++s2++s3++s4}
+
+short_final_rafsi :: String = &final_syllable s:(s1:consonant s2:diphthong -> {s1++s2} / s1:initial_pair s2:vowel -> {s1++s2}) &post_word -> s
+
+stressed_y_rafsi :: String = s1:(stressed_long_rafsi / stressed_CVC_rafsi) s2:y -> {s1++s2}
+
+stressed_y_less_rafsi :: String = s:stressed_CVC_rafsi !y -> s / stressed_CCV_rafsi / stressed_CVV_rafsi
+
+stressed_long_rafsi :: String = s1:initial_pair s2:stressed_vowel s3:consonant -> {s1++s2++s3} / s1:consonant s2:stressed_vowel s3:consonant s4:consonant -> {s1++s2++s3++s4}
+
+stressed_CVC_rafsi :: String = s1:consonant s2:stressed_vowel s3:consonant -> {s1++s2++s3}
+
+stressed_CCV_rafsi :: String = s1:initial_pair s2:stressed_vowel -> {s1++s2}
+
+stressed_CVV_rafsi :: String = s1:consonant s2:(s1:unstressed_vowel s2:h s3:stressed_vowel -> {s1++s2++s3} / stressed_diphthong) ms:r_hyphen? -> {s1++s2++fromMaybe "" ms}
+
+y_rafsi :: String = s1:(long_rafsi / CVC_rafsi) s2:y ms:h? -> {s1++s2++fromMaybe "" ms}
+
+y_less_rafsi :: String = !y_rafsi s:(s:CVC_rafsi !y -> s / CCV_rafsi / CVV_rafsi) !any_extended_rafsi -> s
+
+long_rafsi :: String = s1:initial_pair s2:unstressed_vowel s3:consonant -> {s1++s2++s3} / s1:consonant s2:unstressed_vowel s3:consonant s4:consonant -> {s1++s2++s3++s4}
+
+CVC_rafsi :: String = s1:consonant s2:unstressed_vowel s3:consonant -> {s1++s2++s3}
+
+CCV_rafsi :: String = s1:initial_pair s2:unstressed_vowel -> {s1++s2}
+
+CVV_rafsi :: String = s1:consonant s2:(s1:unstressed_vowel s2:h s3:unstressed_vowel -> {s1++s2++s3} / unstressed_diphthong) ms:r_hyphen? -> {s1++s2++fromMaybe "" ms}
+
+r_hyphen :: String = s:r &consonant -> s / s:n &r -> s
+
+---------------------------------------------------------------------
+
+final_syllable :: String =  s1:onset !y !stressed s2:nucleus !cmene &post_word -> {s1++s2}
+
+stressed_syllable :: String = &stressed s:syllable -> s / s:syllable &stress -> s
+
+stressed_diphthong :: String = &stressed s:diphthong -> s / s:diphthong &stress -> s
+
+stressed_vowel :: String = &stressed s:vowel -> s / s:vowel &stress -> s
+
+unstressed_syllable :: String = !stressed s:syllable !stress -> s / consonantal_syllable
+
+unstressed_diphthong :: String = !stressed s:diphthong !stress -> s
+
+unstressed_vowel :: String = !stressed s:vowel !stress -> s
+
+stress :: String = ss:consonant* ms:y? s1:syllable s2:pause -> {concat ss++fromMaybe "" ms++s1++s2}
+
+stressed :: String = s1:onset ss:comma* s2:("A"/"E"/"I"/"O"/"U") -> {s1++concat ss++s2}
+
+any_syllable :: String = s1:onset s2:nucleus ms:coda? -> {s1++s2++fromMaybe "" ms} / consonantal_syllable 
+
+syllable :: String = s1:onset !y s2:nucleus ms:coda? -> {s1++s2++fromMaybe "" ms}
+
+consonantal_syllable :: String = s1:consonant s2:syllabic &(consonantal_syllable / onset) ms:(s:consonant &spaces -> s)? -> {s1++s2++fromMaybe "" ms}
+
+coda :: String = !any_syllable s:consonant &any_syllable -> s / ms1:syllabic? ms2:consonant? &pause -> {fromMaybe "" ms1++fromMaybe "" ms2}
+
+onset :: String =  h / ms:consonant? s:glide -> {fromMaybe "" ms++s} / initial
+
+nucleus :: String = vowel / diphthong / s:y !nucleus -> s
+
+-------------------------------------------------------------------
+
+glide :: String = s:(i / u) &nucleus !glide -> s
+
+diphthong :: String = s:(s1:a s2:i -> {s1++s2} / s1:a s2:u -> {s1++s2} / s1:e s2:i -> {s1++s2} / s1:o s2:i -> {s1++s2}) !nucleus !glide -> s
+
+vowel :: String = s:(a / e / i / o / u) !nucleus -> s
+
+a :: String = comma* s:("a"/"A") -> s
+
+e :: String = comma* s:("e"/"E") -> s
+
+i :: String = comma* s:("i"/"I") -> s
+
+o :: String = comma* s:("o"/"O") -> s
+
+u :: String = comma* s:("u"/"U") -> s
+
+y :: String = comma* s:("y"/"Y") -> s
+
+---------------------------------------------------------------------
+
+cluster :: String = s:consonant ss:consonant+ -> {s++concat ss}
+
+initial_pair :: String = &initial s1:consonant s2:consonant !consonant -> {s1++s2}
+
+initial :: String = s:(affricate / ms1:sibilant? ms2:other? ms3:liquid? -> {fromMaybe "" ms1++fromMaybe "" ms2++fromMaybe "" ms3}) !consonant !glide -> s
+
+affricate :: String = s1:t s2:c -> {s1++s2} / s1:t s2:s -> {s1++s2} / s1:d s2:j -> {s1++s2} / s1:d s2:z -> {s1++s2}
+
+liquid :: String = l / r 
+
+other :: String = p / s:t !l -> s / k / f / x / b / s:d !l -> s / g / v / m / s:n !liquid -> s
+
+sibilant :: String = c / s:s !x -> s / s:(j / z) !n !liquid -> s
+
+consonant :: String = voiced / unvoiced / syllabic
+
+syllabic :: String = l / m / n / r
+
+voiced :: String = b / d / g / j / v / z
+
+unvoiced :: String = c / f / k / p / s / t / x
+
+l :: String = comma* s:("l"/"L") !h !l -> s
+
+m :: String = comma* s:("m"/"M") !h !m !z -> s
+
+n :: String = comma* s:("n"/"N") !h !n !affricate -> s
+
+r :: String = comma* s:("r"/"R") !h !r -> s
+
+b :: String = comma* s:("b"/"B") !h !b !unvoiced -> s
+
+d :: String = comma* s:("d"/"D") !h !d !unvoiced -> s
+
+g :: String = comma* s:("g"/"G") !h !g !unvoiced -> s
+
+v :: String = comma* s:("v"/"V") !h !v !unvoiced -> s
+
+j :: String = comma* s:("j"/"J") !h !j !z !unvoiced -> s
+
+z :: String = comma* s:("z"/"Z") !h !z !j !unvoiced -> s
+
+s :: String = comma* s:("s"/"S") !h !s !c !voiced -> s
+
+c :: String = comma* s:("c"/"C") !h !c !s !x !voiced -> s
+
+x :: String = comma* s:("x"/"X") !h !x !c !k !voiced -> s
+
+k :: String = comma* s:("k"/"K") !h !k !x !voiced -> s
+
+f :: String = comma* s:("f"/"F") !h !f !voiced -> s
+
+p :: String = comma* s:("p"/"P") !h !p !voiced -> s
+
+t :: String = comma* s:("t"/"T") !h !t !voiced -> s
+
+h :: String = comma* s:("'"/"h") &nucleus -> s
+
+---------------------------------------------------------------------
+
+digit :: String = comma* s:("0"/"1"/"2"/"3"/"4"/"5"/"6"/"7"/"8"/"9") !h !nucleus -> s
+
+post_word :: String = pause / !nucleus s:lojban_word -> s
+
+pause :: String = ss1:comma* ss2:space_char+ -> {concat ss1++concat ss2} / EOF
+
+-- pappy doesn't do EOF
+EOF :: String = s:space_char -> s
+
+comma :: String = ","
+
+dot :: String = "."
+
+non_lojban_word :: String = !lojban_word ss:non_space+ -> {concat ss}
+
+non_space :: String = !space_char s:dot -> s
+
+space_char :: String = c:Char &{c `elem` ".\t\n\r?! "} -> {[c]}
+
+---------------------------------------------------------------------
+
+spaces :: String = !Y s:initial_spaces -> s
+
+initial_spaces :: String = ss:(initial_spaces_sub / !ybu s:Y -> s)+ ms:EOF? -> {concat ss++fromMaybe "" ms} / EOF
+initial_spaces_sub :: String = ss:comma* s:space_char -> {concat ss++s} 
+
+ybu :: String = s1:Y ss:space_char* s2:BU -> {s1++concat ss++s2}
+
+---------------------------------------------------------------------
+
+A :: String = &cmavo s:( s:a -> s / s:e -> s / s1:j s2:i -> {s1++s2} / s:o -> s / s:u -> s ) &post_word -> s
+
+BAI :: String = &cmavo s:( s1:d s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:s s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:z s2:a s3:u -> {s1++s2++s3} / s1:k s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:d s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:c s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:t s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:d s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:j s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:m s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:k s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:v s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:k s2:o s3:i -> {s1++s2++s3} / s1:c s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:p s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:j s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:k s2:a s3:i -> {s1++s2++s3} / s1:b s2:a s3:i -> {s1++s2++s3} / s1:f s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:d s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:c s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:m s2:a s3:u -> {s1++s2++s3} / s1:m s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:r s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:k s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:p s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:p s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:l s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:k s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:t s2:a s3:i -> {s1++s2++s3} / s1:b s2:a s3:u -> {s1++s2++s3} / s1:m s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:c s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:f s2:a s3:u -> {s1++s2++s3} / s1:p s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:c s2:a s3:u -> {s1++s2++s3} / s1:m s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:c s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:p s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:l s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:l s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:b s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:k s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:s s2:a s3:u -> {s1++s2++s3} / s1:f s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:b s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:j s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:g s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:v s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:j s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:m s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:d s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:j s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:p s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:g s2:a s3:u -> {s1++s2++s3} / s1:z s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:m s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:r s2:a s3:i -> {s1++s2++s3} ) &post_word -> s
+
+BAhE :: String = &cmavo s:( s1:b s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:z s2:a s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+BE :: String = &cmavo s:( s1:b s2:e -> {s1++s2} ) &post_word -> s
+
+BEI :: String = &cmavo s:( s1:b s2:e s3:i -> {s1++s2++s3} ) &post_word -> s
+
+BEhO :: String = &cmavo s:( s1:b s2:e s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+BIhE :: String = &cmavo s:( s1:b s2:i s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+BIhI :: String = &cmavo s:( s1:m s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:b s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:b s2:i s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+BO :: String = &cmavo s:( s1:b s2:o -> {s1++s2} ) &post_word -> s
+
+BOI :: String = &cmavo s:( s1:b s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+BU :: String = &cmavo s:( s1:b s2:u -> {s1++s2} ) &post_word -> s
+
+BY :: String = ybu / &cmavo s:( s1:j s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:r s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:g s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:j s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:l s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:s s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:t s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:g s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:y s2:h s3:y -> {s1++s2++s3} / s1:b s2:y -> {s1++s2} / s1:c s2:y -> {s1++s2} / s1:d s2:y -> {s1++s2} / s1:f s2:y -> {s1++s2} / s1:g s2:y -> {s1++s2} / s1:j s2:y -> {s1++s2} / s1:k s2:y -> {s1++s2} / s1:l s2:y -> {s1++s2} / s1:m s2:y -> {s1++s2} / s1:n s2:y -> {s1++s2} / s1:p s2:y -> {s1++s2} / s1:r s2:y -> {s1++s2} / s1:s s2:y -> {s1++s2} / s1:t s2:y -> {s1++s2} / s1:v s2:y -> {s1++s2} / s1:x s2:y -> {s1++s2} / s1:z s2:y -> {s1++s2} ) &post_word -> s
+
+CAhA :: String = &cmavo s:( s1:c s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:p s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:n s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:k s2:a s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+CAI :: String = &cmavo s:( s1:p s2:e s3:i -> {s1++s2++s3} / s1:c s2:a s3:i -> {s1++s2++s3} / s1:c s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:s s2:a s3:i -> {s1++s2++s3} / s1:r s2:u s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+CEI :: String = &cmavo s:( s1:c s2:e s3:i -> {s1++s2++s3} ) &post_word -> s
+
+CEhE :: String = &cmavo s:( s1:c s2:e s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+CO :: String = &cmavo s:( s1:c s2:o -> {s1++s2} ) &post_word -> s
+
+COI :: String = &cmavo s:( s1:j s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:c s2:o s3:i -> {s1++s2++s3} / s1:f s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:m s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:f s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:p s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:k s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:n s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:r s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:b s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:j s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:m s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:k s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:v s2:i s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+CU :: String = &cmavo s:( s1:c s2:u -> {s1++s2} ) &post_word -> s
+
+CUhE :: String = &cmavo s:( s1:c s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:n s2:a s3:u -> {s1++s2++s3} ) &post_word -> s
+
+DAhO :: String = &cmavo s:( s1:d s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+DOI :: String = &cmavo s:( s1:d s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+DOhU :: String = &cmavo s:( s1:d s2:o s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+FA :: String = &cmavo s:( s1:f s2:a s3:i -> {s1++s2++s3} / s1:f s2:a -> {s1++s2} / s1:f s2:e -> {s1++s2} / s1:f s2:o -> {s1++s2} / s1:f s2:u -> {s1++s2} / s1:f s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:f s2:i -> {s1++s2} ) &post_word -> s
+
+FAhA :: String = &cmavo s:( s1:d s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:b s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:v s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:g s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:t s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:c s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:z s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:r s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:t s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:b s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:n s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:p s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:n s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:z s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:z s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:z s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:f s2:a s3:h s4:a -> {s1++s2++s3++s4} ) &post_word -> s
+
+FAhO :: String = &cmavo s:( s1:f s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+FEhE :: String = &cmavo s:( s1:f s2:e s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+FEhU :: String = &cmavo s:( s1:f s2:e s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+FIhO :: String = &cmavo s:( s1:f s2:i s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+FOI :: String = &cmavo s:( s1:f s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+FUhA :: String = &cmavo s:( s1:f s2:u s3:h s4:a -> {s1++s2++s3++s4} ) &post_word -> s
+
+FUhE :: String = &cmavo s:( s1:f s2:u s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+FUhO :: String = &cmavo s:( s1:f s2:u s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+GA :: String = &cmavo s:( s1:g s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:g s2:e -> {s1++s2} / s1:g s2:o -> {s1++s2} / s1:g s2:a -> {s1++s2} / s1:g s2:u -> {s1++s2} ) &post_word -> s
+
+GAhO :: String = &cmavo s:( s1:k s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:g s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+GEhU :: String = &cmavo s:( s1:g s2:e s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+GI :: String = &cmavo s:( s1:g s2:i -> {s1++s2} ) &post_word -> s
+
+GIhA :: String = &cmavo s:( s1:g s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:g s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:g s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:g s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:g s2:i s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+GOI :: String = &cmavo s:( s1:n s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:n s2:e -> {s1++s2} / s1:g s2:o s3:i -> {s1++s2++s3} / s1:p s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:p s2:e -> {s1++s2} / s1:p s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:p s2:o -> {s1++s2} ) &post_word -> s
+
+GOhA :: String = &cmavo s:( s1:m s2:o -> {s1++s2} / s1:n s2:e s3:i -> {s1++s2++s3} / s1:g s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:g s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:g s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:n s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:g s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:g s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:d s2:u -> {s1++s2} / s1:b s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:b s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:b s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:c s2:o s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+GUhA :: String = &cmavo s:( s1:g s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:g s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:g s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:g s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:g s2:u s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+I :: String = &cmavo s:( s:i -> s ) &post_word -> s
+
+JA :: String = &cmavo s:( s1:j s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:j s2:e -> {s1++s2} / s1:j s2:o -> {s1++s2} / s1:j s2:a -> {s1++s2} / s1:j s2:u -> {s1++s2} ) &post_word -> s
+
+JAI :: String = &cmavo s:( s1:j s2:a s3:i -> {s1++s2++s3} ) &post_word -> s
+
+JOhI :: String = &cmavo s:( s1:j s2:o s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+JOI :: String = &cmavo s:( s1:f s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:p s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:j s2:o s3:i -> {s1++s2++s3} / s1:c s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:e -> {s1++s2} / s1:j s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:k s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:j s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:j s2:u s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+KE :: String = &cmavo s:( s1:k s2:e -> {s1++s2} ) &post_word -> s
+
+KEhE :: String = &cmavo s:( s1:k s2:e s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+KEI :: String = &cmavo s:( s1:k s2:e s3:i -> {s1++s2++s3} ) &post_word -> s
+
+KI :: String = &cmavo s:( s1:k s2:i -> {s1++s2} ) &post_word -> s
+
+KOhA :: String = &cmavo s:( s1:d s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:d s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:d s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:d s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:d s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:d s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:d s2:e s3:i -> {s1++s2++s3} / s1:d s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:m s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:m s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:m s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:d s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:k s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:f s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:k s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:k s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:k s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:k s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:f s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:f s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:f s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:f s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:v s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:v s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:v s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:v s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:v s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:u -> {s1++s2} / s1:r s2:i -> {s1++s2} / s1:r s2:a -> {s1++s2} / s1:t s2:a -> {s1++s2} / s1:t s2:u -> {s1++s2} / s1:t s2:i -> {s1++s2} / s1:z s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:k s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:m s2:a -> {s1++s2} / s1:z s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:z s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:c s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:d s2:a -> {s1++s2} / s1:d s2:e -> {s1++s2} / s1:d s2:i -> {s1++s2} / s1:k s2:o -> {s1++s2} / s1:m s2:i -> {s1++s2} / s1:d s2:o -> {s1++s2} ) &post_word -> s
+
+KU :: String = &cmavo s:( s1:k s2:u -> {s1++s2} ) &post_word -> s
+
+KUhE :: String = &cmavo s:( s1:k s2:u s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+KUhO :: String = &cmavo s:( s1:k s2:u s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+LA :: String = &cmavo s:( s1:l s2:a s3:i -> {s1++s2++s3} / s1:l s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:l s2:a -> {s1++s2} ) &post_word -> s
+
+LAU :: String = &cmavo s:( s1:c s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:l s2:a s3:u -> {s1++s2++s3} / s1:z s2:a s3:i -> {s1++s2++s3} / s1:t s2:a s3:u -> {s1++s2++s3} ) &post_word -> s
+
+LAhE :: String = &cmavo s:( s1:t s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:l s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:l s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:l s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:v s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:l s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:l s2:u s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+LE :: String = &cmavo s:( s1:l s2:e s3:i -> {s1++s2++s3} / s1:l s2:o s3:i -> {s1++s2++s3} / s1:l s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:l s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:l s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:l s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:l s2:o -> {s1++s2} / s1:l s2:e -> {s1++s2} ) &post_word -> s
+
+LEhU :: String = &cmavo s:( s1:l s2:e s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+LI :: String = &cmavo s:( s1:m s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:l s2:i -> {s1++s2} ) &post_word -> s
+
+LIhU :: String = &cmavo s:( s1:l s2:i s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+LOhO :: String = &cmavo s:( s1:l s2:o s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+LOhU :: String = &cmavo s:( s1:l s2:o s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+LU :: String = &cmavo s:( s1:l s2:u -> {s1++s2} ) &post_word -> s
+
+LUhU :: String = &cmavo s:( s1:l s2:u s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+MAhO :: String = &cmavo s:( s1:m s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+MAI :: String = &cmavo s:( s1:m s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:m s2:a s3:i -> {s1++s2++s3} ) &post_word -> s
+
+ME :: String = &cmavo s:( s1:m s2:e -> {s1++s2} ) &post_word -> s
+
+MEhU :: String = &cmavo s:( s1:m s2:e s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+MOhE :: String = &cmavo s:( s1:m s2:o s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+MOhI :: String = &cmavo s:( s1:m s2:o s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+MOI :: String = &cmavo s:( s1:m s2:e s3:i -> {s1++s2++s3} / s1:m s2:o s3:i -> {s1++s2++s3} / s1:s s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:c s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:v s2:a s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+NA :: String = &cmavo s:( s1:j s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:a -> {s1++s2} ) &post_word -> s
+
+NAI :: String = &cmavo s:( s1:n s2:a s3:i -> {s1++s2++s3} ) &post_word -> s
+
+NAhE :: String = &cmavo s:( s1:t s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:j s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:n s2:o s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+NAhU :: String = &cmavo s:( s1:n s2:a s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+NIhE :: String = &cmavo s:( s1:n s2:i s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+NIhO :: String = &cmavo s:( s1:n s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:n s2:o s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+NOI :: String = &cmavo s:( s1:v s2:o s3:i -> {s1++s2++s3} / s1:n s2:o s3:i -> {s1++s2++s3} / s1:p s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+NU :: String = &cmavo s:( s1:n s2:i -> {s1++s2} / s1:d s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:n s2:u -> {s1++s2} / s1:l s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:k s2:a -> {s1++s2} / s1:j s2:e s3:i -> {s1++s2++s3} / s1:s s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:z s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:m s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:p s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:z s2:a s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+NUhA :: String = &cmavo s:( s1:n s2:u s3:h s4:a -> {s1++s2++s3++s4} ) &post_word -> s
+
+NUhI :: String = &cmavo s:( s1:n s2:u s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+NUhU :: String = &cmavo s:( s1:n s2:u s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+PA :: String = &cmavo s:( s1:d s2:a s3:u -> {s1++s2++s3} / s1:f s2:e s3:i -> {s1++s2++s3} / s1:g s2:a s3:i -> {s1++s2++s3} / s1:j s2:a s3:u -> {s1++s2++s3} / s1:r s2:e s3:i -> {s1++s2++s3} / s1:v s2:a s3:i -> {s1++s2++s3} / s1:p s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:p s2:i -> {s1++s2} / s1:f s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:z s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:m s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:n s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:k s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:m s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:d s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:s s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:j s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:s s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:s s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:r s2:o -> {s1++s2} / s1:r s2:a s3:u -> {s1++s2++s3} / s1:s s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:s s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:s s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:m s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:d s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:t s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:k s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:x s2:o -> {s1++s2} / s1:p s2:a s3:i -> {s1++s2++s3} / s1:n s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:n s2:o -> {s1++s2} / s1:p s2:a -> {s1++s2} / s1:r s2:e -> {s1++s2} / s1:c s2:i -> {s1++s2} / s1:v s2:o -> {s1++s2} / s1:m s2:u -> {s1++s2} / s1:x s2:a -> {s1++s2} / s1:z s2:e -> {s1++s2} / s1:b s2:i -> {s1++s2} / s1:s s2:o -> {s1++s2} / digit ) &post_word -> s
+
+PEhE :: String = &cmavo s:( s1:p s2:e s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+PEhO :: String = &cmavo s:( s1:p s2:e s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+PU :: String = &cmavo s:( s1:b s2:a -> {s1++s2} / s1:p s2:u -> {s1++s2} / s1:c s2:a -> {s1++s2} ) &post_word -> s
+
+RAhO :: String = &cmavo s:( s1:r s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+ROI :: String = &cmavo s:( s1:r s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+SA :: String = &cmavo s:( s1:s s2:a -> {s1++s2} ) &post_word -> s
+
+SE :: String = &cmavo s:( s1:s s2:e -> {s1++s2} / s1:t s2:e -> {s1++s2} / s1:v s2:e -> {s1++s2} / s1:x s2:e -> {s1++s2} ) &post_word -> s
+
+SEI :: String = &cmavo s:( s1:s s2:e s3:i -> {s1++s2++s3} / s1:t s2:i s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+SEhU :: String = &cmavo s:( s1:s s2:e s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+SI :: String = &cmavo s:( s1:s s2:i -> {s1++s2} ) &post_word -> s
+
+SOI :: String = &cmavo s:( s1:s s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+SU :: String = &cmavo s:( s1:s s2:u -> {s1++s2} ) &post_word -> s
+
+TAhE :: String = &cmavo s:( s1:r s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:d s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:n s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+TEhU :: String = &cmavo s:( s1:t s2:e s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+TEI :: String = &cmavo s:( s1:t s2:e s3:i -> {s1++s2++s3} ) &post_word -> s
+
+TO :: String = &cmavo s:( s1:t s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:o -> {s1++s2} ) &post_word -> s
+
+TOI :: String = &cmavo s:( s1:t s2:o s3:i -> {s1++s2++s3} ) &post_word -> s
+
+TUhE :: String = &cmavo s:( s1:t s2:u s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+TUhU :: String = &cmavo s:( s1:t s2:u s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
+
+UI :: String = &cmavo s:( s1:i s2:h s3:a -> {s1++s2++s3} / s1:i s2:e -> {s1++s2} / s1:a s2:h s3:e -> {s1++s2++s3} / s1:u s2:h s3:i -> {s1++s2++s3} / s1:i s2:h s3:o -> {s1++s2++s3} / s1:i s2:h s3:e -> {s1++s2++s3} / s1:a s2:h s3:a -> {s1++s2++s3} / s1:i s2:a -> {s1++s2} / s1:o s2:h s3:i -> {s1++s2++s3} / s1:o s2:h s3:e -> {s1++s2++s3} / s1:e s2:h s3:e -> {s1++s2++s3} / s1:o s2:i -> {s1++s2} / s1:u s2:o -> {s1++s2} / s1:e s2:h s3:i -> {s1++s2++s3} / s1:u s2:h s3:o -> {s1++s2++s3} / s1:a s2:u -> {s1++s2} / s1:u s2:a -> {s1++s2} / s1:a s2:h s3:i -> {s1++s2++s3} / s1:i s2:h s3:u -> {s1++s2++s3} / s1:i s2:i -> {s1++s2} / s1:u s2:h s3:a -> {s1++s2++s3} / s1:u s2:i -> {s1++s2} / s1:a s2:h s3:o -> {s1++s2++s3} / s1:a s2:i -> {s1++s2} / s1:a s2:h s3:u -> {s1++s2++s3} / s1:i s2:u -> {s1++s2} / s1:e s2:i -> {s1++s2} / s1:o s2:h s3:o -> {s1++s2++s3} / s1:e s2:h s3:a -> {s1++s2++s3} / s1:u s2:u -> {s1++s2} / s1:o s2:h s3:a -> {s1++s2++s3} / s1:o s2:h s3:u -> {s1++s2++s3} / s1:u s2:h s3:u -> {s1++s2++s3} / s1:e s2:h s3:o -> {s1++s2++s3} / s1:i s2:o -> {s1++s2} / s1:e s2:h s3:u -> {s1++s2++s3} / s1:u s2:e -> {s1++s2} / s1:i s2:h s3:i -> {s1++s2++s3} / s1:u s2:h s3:e -> {s1++s2++s3} / s1:b s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:j s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:s s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:t s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:k s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:z s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:p s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:r s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:j s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:t s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:r s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:l s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:b s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:m s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:d s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:t s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:v s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:p s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:z s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:a s3:h s4:e -> {s1++s2++s3++s4} / s1:l s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:k s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:d s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:j s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:k s2:a s3:u -> {s1++s2++s3} / s1:t s2:a s3:h s4:u -> {s1++s2++s3++s4} / s1:n s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:j s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:b s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:l s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:p s2:a s3:u -> {s1++s2++s3} / s1:m s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:k s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:j s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:s s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:p s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:p s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:r s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:r s2:o s3:h s4:e -> {s1++s2++s3++s4} / s1:r s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:r s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:r s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:l s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:j s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:f s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:d s2:a s3:i -> {s1++s2++s3} / s1:g s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:z s2:o s3:h s4:o -> {s1++s2++s3++s4} / s1:b s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:r s2:i s3:h s4:e -> {s1++s2++s3++s4} / s1:s s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:s s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:v s2:u s3:h s4:e -> {s1++s2++s3++s4} / s1:k s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:x s2:u -> {s1++s2} / s1:g s2:e s3:h s4:e -> {s1++s2++s3++s4} / s1:b s2:u s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+VA :: String = &cmavo s:( s1:v s2:i -> {s1++s2} / s1:v s2:a -> {s1++s2} / s1:v s2:u -> {s1++s2} ) &post_word -> s
+
+VAU :: String = &cmavo s:( s1:v s2:a s3:u -> {s1++s2++s3} ) &post_word -> s
+
+VEI :: String = &cmavo s:( s1:v s2:e s3:i -> {s1++s2++s3} ) &post_word -> s
+
+VEhO :: String = &cmavo s:( s1:v s2:e s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+VUhU :: String = &cmavo s:( s1:g s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:f s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:p s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:f s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:v s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:s s2:u s3:h s4:i -> {s1++s2++s3++s4} / s1:j s2:u s3:h s4:u -> {s1++s2++s3++s4} / s1:g s2:e s3:i -> {s1++s2++s3} / s1:p s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:f s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:t s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:c s2:u s3:h s4:a -> {s1++s2++s3++s4} / s1:v s2:a s3:h s4:a -> {s1++s2++s3++s4} / s1:n s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:d s2:e s3:h s4:o -> {s1++s2++s3++s4} / s1:f s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:s s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:r s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:r s2:i s3:h s4:o -> {s1++s2++s3++s4} / s1:s s2:a s3:h s4:i -> {s1++s2++s3++s4} / s1:p s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:s s2:i s3:h s4:i -> {s1++s2++s3++s4} ) &post_word -> s
+
+VEhA :: String = &cmavo s:( s1:v s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:v s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:v s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:v s2:e s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+VIhA :: String = &cmavo s:( s1:v s2:i s3:h s4:i -> {s1++s2++s3++s4} / s1:v s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:v s2:i s3:h s4:u -> {s1++s2++s3++s4} / s1:v s2:i s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+VUhO :: String = &cmavo s:( s1:v s2:u s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+XI :: String = &cmavo s:( s1:x s2:i -> {s1++s2} ) &post_word -> s
+
+Y :: String = &cmavo s:( ss:y+ -> {concat ss} ) &post_word -> s
+
+ZAhO :: String = &cmavo s:( s1:c s2:o s3:h s4:i -> {s1++s2++s3++s4} / s1:p s2:u s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:m s2:o s3:h s4:u -> {s1++s2++s3++s4} / s1:c s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:c s2:o s3:h s4:a -> {s1++s2++s3++s4} / s1:d s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:b s2:a s3:h s4:o -> {s1++s2++s3++s4} / s1:d s2:i s3:h s4:a -> {s1++s2++s3++s4} / s1:z s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+ZEhA :: String = &cmavo s:( s1:z s2:e s3:h s4:u -> {s1++s2++s3++s4} / s1:z s2:e s3:h s4:a -> {s1++s2++s3++s4} / s1:z s2:e s3:h s4:i -> {s1++s2++s3++s4} / s1:z s2:e s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+ZEI :: String = &cmavo s:( s1:z s2:e s3:i -> {s1++s2++s3} ) &post_word -> s
+
+ZI :: String = &cmavo s:( s1:z s2:u -> {s1++s2} / s1:z s2:a -> {s1++s2} / s1:z s2:i -> {s1++s2} ) &post_word -> s
+
+ZIhE :: String = &cmavo s:( s1:z s2:i s3:h s4:e -> {s1++s2++s3++s4} ) &post_word -> s
+
+ZO :: String = &cmavo s:( s1:z s2:o -> {s1++s2} ) &post_word -> s
+
+ZOI :: String = &cmavo s:( s1:z s2:o s3:i -> {s1++s2++s3} / s1:l s2:a s3:h s4:o -> {s1++s2++s3++s4} ) &post_word -> s
+
+ZOhU :: String = &cmavo s:( s1:z s2:o s3:h s4:u -> {s1++s2++s3++s4} ) &post_word -> s
